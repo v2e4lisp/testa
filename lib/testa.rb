@@ -6,8 +6,8 @@ module Testa
   #
   # description - test's description string. Default is nil
   # block       - test code
-  def test description=nil, &block
-    Testa.tests << Test.new(caller(0)[1], description, &block)
+  def test description=nil, options={}, &block
+    Testa.tests << Test.new(caller(0)[1], description, options, &block)
   end
 
   class << self
@@ -16,16 +16,22 @@ module Testa
       reporter ||= config[:reporter].new
 
       runnable.each { |t|
-        Array(config[:before]).each(&:call)
+        t.hooks[:before].each { |h|
+          Array(config[:before][h]).each(&:call)
+        }
+
         reporter.after_each(t.call)
-        Array(config[:after]).each(&:call)
+
+        t.hooks[:after].each { |h|
+          Array(config[:after][h]).each(&:call)
+        }
       }
 
       reporter.after_all(results)
     end
 
     def runnable
-      @_tests ||= Array(config[:filter]).inject(tests) {|ts, f| f[ts]}
+      @_tests ||= Array(config[:filter]).inject(tests) {|ts, f| f.call ts}
     end
 
     def tests
@@ -47,16 +53,8 @@ module Testa
       @config ||= {:matcher  => Matcher,
                    :reporter => Reporter,
                    :filter   => lambda {|tests| tests},
-                   :before   => nil,
-                   :after    => nil}
-    end
-
-    def [](key)
-      config[key]
-    end
-
-    def []=(key, value)
-      config[key] = value
+                   :before   => {},
+                   :after    => {}}
     end
   end
 
@@ -69,30 +67,42 @@ module Testa
   end
 
   class Test
-    attr_accessor :description, :result, :location
+    attr_accessor :description, :result, :location, :options
 
-    def initialize location, description, &block
+    def initialize location, description, option={}, &block
       @description = description
+      @options = options
+      @options[:before] = Array(*@options[:before]) if @options[:before]
+      @options[:after] = Array(*@options[:after]) if @options[:after]
       @block = block
       @result = nil
       @location = location
     end
 
     def call
-      @result ||=
-        unless @block
-          Testa::Result.new(self, :todo)
+      @result ||= _call
+    end
+
+    def hooks
+      options
+    end
+
+    private
+
+    def _call
+      unless @block
+        :todo
+      else
+        begin
+          Testa::Context.new.instance_eval &@block
+        rescue Testa::Failure => e
+          :failed, e
+        rescue => e
+          :error, e
         else
-          begin
-            Testa::Context.new.instance_eval &@block
-          rescue Testa::Failure => e
-            Testa::Result.new self, :failed, e
-          rescue => e
-            Testa::Result.new self, :error, e
-          else
-            Testa::Result.new self, :passed
-          end
+          :passed
         end
+      end
     end
   end
 
@@ -146,15 +156,16 @@ module Testa
       yield or fail!
     end
 
-    def fail_if
-      !yield or fail!
-    end
-
-    def should_raise
+    def error(class_or_message=nil, message=nil)
       begin
         yield
       rescue => e
-        return
+        return ok { e.is_a?(class_or_message) and e.message[message] } if message
+        if class_or_message.is_a? Class
+          ok { e.is_a? class_or_message }
+        else
+          ok { e.message[message] }
+        end
       else
         fail!
       end
