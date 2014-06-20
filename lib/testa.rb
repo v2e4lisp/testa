@@ -14,19 +14,7 @@ module Testa
     def run
       Testa::Context.send(:include, *config[:matcher])
       reporter ||= config[:reporter].new
-
-      runnable.each { |t|
-        t.hooks[:before].each { |h|
-          Array(config[:before][h]).each(&:call)
-        }
-
-        reporter.after_each(t.call)
-
-        t.hooks[:after].each { |h|
-          Array(config[:after][h]).each(&:call)
-        }
-      }
-
+      runnable.each { |t|  reporter.after_each(t.call) }
       reporter.after_all(results)
     end
 
@@ -53,8 +41,8 @@ module Testa
       @config ||= {:matcher  => Matcher,
                    :reporter => Reporter,
                    :filter   => lambda {|tests| tests},
-                   :before   => {},
-                   :after    => {}}
+                   :before   => nil,
+                   :after    => nil}
     end
   end
 
@@ -72,8 +60,6 @@ module Testa
     def initialize location, description, option={}, &block
       @description = description
       @options = options
-      @options[:before] = Array(*@options[:before]) if @options[:before]
-      @options[:after] = Array(*@options[:after]) if @options[:after]
       @block = block
       @result = nil
       @location = location
@@ -83,8 +69,16 @@ module Testa
       @result ||= _call
     end
 
-    def hooks
-      options
+    def before_hooks
+      Array(*@options[:before])
+    end
+
+    def after_hooks
+      Array(*@options[:after])
+    end
+
+    def in_context &block
+      (@context ||= Testa::Context.new).instance_eval &block
     end
 
     private
@@ -94,7 +88,15 @@ module Testa
         :todo
       else
         begin
-          Testa::Context.new.instance_eval &@block
+          before_hooks.each { |hn|
+            Array(config[:before][hn]).each {|h| in_context { h.call }}
+          }
+
+          in_context &@block
+
+          after_hooks.each { |hn|
+            Array(config[:after][hn]).each {|h| in_context { h.call }}
+          }
         rescue Testa::Failure => e
           :failed, e
         rescue => e
