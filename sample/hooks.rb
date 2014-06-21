@@ -22,4 +22,16 @@ test("[NO SETUP] user have a default name ") {
   ok { @user.name == "default-user" }
 }
 
+with(:before => :init_user) {
+
+  test("user object") {
+    ok { @user }
+  }
+
+  test("user has a name") {
+    ok { @user.name }
+  }
+
+}
+
 Testa.run

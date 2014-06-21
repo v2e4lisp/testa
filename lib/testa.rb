@@ -2,13 +2,22 @@ require "testa/version"
 
 module Testa
 
-  # Then only public API for unit test
+  # Create a test
   #
   # description - test's description string. Default is nil
   # options     - :before, :after hooks
   # block       - test code
   def test description=nil, options={}, &block
-    Testa.tests << Test.new(caller(0)[1], description, options, &block)
+    location = caller(0)[1].split(":").tap(&:pop).join ":"
+    Testa.tests << Test.new(location, description, options, &block)
+  end
+
+  # setup default before/after hooks for tests created in block
+  def with options
+    Testa.option_chain.push options
+    yield
+  ensure
+    Testa.option_chain.pop
   end
 
   class << self
@@ -34,6 +43,14 @@ module Testa
 
     def define_hook(name, &block)
       config[:hooks][name] = block
+    end
+
+    def option_chain
+      @option_chain ||= []
+    end
+
+    def current_options
+      option_chain.inject({}) {|ret, opt| ret.merge opt}
     end
 
     # Configuration
@@ -64,7 +81,7 @@ module Testa
     def initialize location, description, options={}, &block
       @location = location
       @description = description
-      @options = options
+      @options = Testa.current_options.merge options
       @block = block
       @result = nil
     end
@@ -133,17 +150,15 @@ module Testa
         case result.status
         when :failed, :error
           @out.puts
-          @out.puts "[#{result.status.upcase}]",
-            result.test.description || "*NO DESCRIPTION*"
+          @out.puts "[#{result.status.upcase}] #{result.test.location}",
+            (result.test.description || "*NO DESCRIPTION*")
           @out.puts "\t#{result.exception.message}"
-          @out.puts "\t#{result.test.location}"
-          @out.puts result.exception.backtrace#.reject {|m| m[__FILE__] }
+          @out.puts result.exception.backtrace.reject {|m| m[__FILE__] }
 
         when :todo
           @out.puts
-          @out.puts "[#{result.status.upcase}]",
+          @out.puts "[#{result.status.upcase}] #{result.test.location}",
             result.test.description || "*NO DESCRIPTION*"
-          @out.puts "\t#{result.test.location}"
         end
       }
 
