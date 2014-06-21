@@ -32,19 +32,21 @@ module Testa
       runnable.map(&:result)
     end
 
+    def define_hook(name, &block)
+      config[:hooks][name] = block
+    end
+
     # Configuration
     #
     #   :matchers     - {Array of Module} module(s) containing assertion helpers
     #   :reporter     - {Object} whose class inherits ReporterBase
     #   :filters      - {Array of Callable} filter out some tests
-    #   :before_hooks - {Hash of Callable} Global callbacks. Run before each test.
-    #   :after_hooks  - {Hash of Callable} Global callbacks. Run after each test.
+    #   :hooks        - {Hash of Callable} Global callbacks.
     def config
       @config ||= {:matchers     => [Matcher],
                    :reporter     => Reporter.new,
                    :filters      => [],
-                   :before_hooks => {},
-                   :after_hooks  => {}}
+                   :hooks        => {}}
     end
   end
 
@@ -71,24 +73,20 @@ module Testa
       @result ||= Result.new self, *_call
     end
 
-    def before_hooks
-      Testa.config[:before_hooks].values_at(*@options[:before]).compact
-    end
-
-    def after_hooks
-      Testa.config[:after_hooks].values_at(*@options[:after]).compact
+    def hooks(before_or_after)
+      Testa.config[:hooks].values_at(*@options[before_or_after]).compact
     end
 
     def in_context &block
-      (@context ||= Testa::Context.new).instance_eval &block
+      (@context ||= Context.new).instance_eval &block
     end
 
     private
 
     def run
-      before_hooks.each { |h| in_context { h.call }}
+      hooks(:before).each { |h| in_context &h }
       in_context &@block
-      after_hooks.each { |h| in_context { h.call }}
+      hooks(:after).each { |h| in_context &h }
     end
 
     def _call
@@ -97,7 +95,7 @@ module Testa
       else
         begin
           run
-        rescue Testa::Failure => e
+        rescue Failure => e
           [:failed, e]
         rescue => e
           [:error, e]
@@ -139,7 +137,7 @@ module Testa
             result.test.description || "*NO DESCRIPTION*"
           @out.puts "\t#{result.exception.message}"
           @out.puts "\t#{result.test.location}"
-          @out.puts result.exception.backtrace.reject {|m| m[__FILE__] }
+          @out.puts result.exception.backtrace#.reject {|m| m[__FILE__] }
 
         when :todo
           @out.puts
@@ -184,7 +182,7 @@ module Testa
     end
 
     def fail!
-      raise Testa::Failure
+      raise Failure
     end
   end
 
