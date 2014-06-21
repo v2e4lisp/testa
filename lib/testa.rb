@@ -5,6 +5,7 @@ module Testa
   # Then only public API for unit test
   #
   # description - test's description string. Default is nil
+  # options     - :before, :after hooks
   # block       - test code
   def test description=nil, options={}, &block
     Testa.tests << Test.new(caller(0)[1], description, options, &block)
@@ -12,14 +13,15 @@ module Testa
 
   class << self
     def run
-      Testa::Context.send(:include, *config[:matcher])
-      reporter ||= config[:reporter].new
-      runnable.each { |t|  reporter.after_each(t.call) }
+      Testa::Context.send(:include, *config[:matchers])
+      reporter = config[:reporter]
+      runnable.each { |t| reporter.after_each(t.call) }
       reporter.after_all(results)
+      not results.any? { |r| [:error, :failed].include? r.status }
     end
 
     def runnable
-      @_tests ||= Array(config[:filter]).inject(tests) {|ts, f| f.call ts}
+      @_tests ||= config[:filters].inject(tests) {|ts, f| f.call ts}
     end
 
     def tests
@@ -32,17 +34,17 @@ module Testa
 
     # Configuration
     #
-    #  :matcher  - {Array|Module} module(s) containing assertion helpers
-    #  :reporter - {Class} inherit ReporterBase for message logging
-    #  :filter   - {Array|Callable} filter out some tests
-    #  :before   - {Array|Callable} Global callbacks. Run before each test.
-    #  :after    - {Array|Callable} Global callbacks. Run after each test.
+    #   :matchers     - {Array of Module} module(s) containing assertion helpers
+    #   :reporter     - {Object} whose class inherits ReporterBase
+    #   :filters      - {Array of Callable} filter out some tests
+    #   :before_hooks - {Hash of Callable} Global callbacks. Run before each test.
+    #   :after_hooks  - {Hash of Callable} Global callbacks. Run after each test.
     def config
-      @config ||= {:matcher  => Matcher,
-                   :reporter => Reporter,
-                   :filter   => lambda {|tests| tests},
-                   :before   => nil,
-                   :after    => nil}
+      @config ||= {:matchers     => [Matcher],
+                   :reporter     => Reporter.new,
+                   :filters      => [],
+                   :before_hooks => {},
+                   :after_hooks  => {}}
     end
   end
 
@@ -57,24 +59,24 @@ module Testa
   class Test
     attr_accessor :description, :result, :location, :options
 
-    def initialize location, description, option={}, &block
+    def initialize location, description, options={}, &block
+      @location = location
       @description = description
       @options = options
       @block = block
       @result = nil
-      @location = location
     end
 
     def call
-      @result ||= _call
+      @result ||= Result.new self, *_call
     end
 
     def before_hooks
-      Array(*@options[:before])
+      Testa.config[:before_hooks].values_at(*@options[:before]).compact
     end
 
     def after_hooks
-      Array(*@options[:after])
+      Testa.config[:after_hooks].values_at(*@options[:after]).compact
     end
 
     def in_context &block
@@ -83,24 +85,22 @@ module Testa
 
     private
 
+    def run
+      before_hooks.each { |h| in_context { h.call }}
+      in_context &@block
+      after_hooks.each { |h| in_context { h.call }}
+    end
+
     def _call
       unless @block
         :todo
       else
         begin
-          before_hooks.each { |hn|
-            Array(config[:before][hn]).each {|h| in_context { h.call }}
-          }
-
-          in_context &@block
-
-          after_hooks.each { |hn|
-            Array(config[:after][hn]).each {|h| in_context { h.call }}
-          }
+          run
         rescue Testa::Failure => e
-          :failed, e
+          [:failed, e]
         rescue => e
-          :error, e
+          [:error, e]
         else
           :passed
         end
@@ -114,7 +114,8 @@ module Testa
              :error  => "E",
              :todo   => "*"}
 
-    def initialize
+    def initialize(out=nil)
+      @out = out || $stdout
       @stat = {:passed => 0,
                :failed => 0,
                :error  => 0,
@@ -128,25 +129,33 @@ module Testa
     end
 
     def after_all(results)
-      puts
+      @out.puts
 
       results.each {|result|
-        if [:failed, :error].include? result.status
-          puts
-          puts result.test.description || "*NO DESCRIPTION*"
-          puts "\t#{result.exception.message}"
-          puts "\t#{result.test.location}"
-          puts result.exception.backtrace
+        case result.status
+        when :failed, :error
+          @out.puts
+          @out.puts "[#{result.status.upcase}]",
+            result.test.description || "*NO DESCRIPTION*"
+          @out.puts "\t#{result.exception.message}"
+          @out.puts "\t#{result.test.location}"
+          @out.puts result.exception.backtrace.reject {|m| m[__FILE__] }
+
+        when :todo
+          @out.puts
+          @out.puts "[#{result.status.upcase}]",
+            result.test.description || "*NO DESCRIPTION*"
+          @out.puts "\t#{result.test.location}"
         end
       }
 
-      puts
-      puts "  PASSED: #{@stat[:passed]}"
-      puts "  FAILED: #{@stat[:failed]}"
-      puts "   ERROR: #{@stat[:todo]}"
-      puts "    TODO: #{@stat[:todo]}"
-      puts "   TOTAL: #{@stat.values.inject(:+)}"
-      puts
+      @out.puts
+      @out.puts "  PASSED: #{@stat[:passed]}"
+      @out.puts "  FAILED: #{@stat[:failed]}"
+      @out.puts "   ERROR: #{@stat[:error]}"
+      @out.puts "    TODO: #{@stat[:todo]}"
+      @out.puts "   TOTAL: #{@stat.values.inject(:+)}"
+      @out.puts
     end
   end
 
@@ -162,11 +171,12 @@ module Testa
       begin
         yield
       rescue => e
-        return ok { e.is_a?(class_or_message) and e.message[message] } if message
+        return unless class_or_message
+        ok { e.is_a?(class_or_message) and e.message[message] } if message
         if class_or_message.is_a? Class
-          ok { e.is_a? class_or_message }
+          ok { e.class == class_or_message }
         else
-          ok { e.message[message] }
+          ok { e.message[class_or_message] }
         end
       else
         fail!
