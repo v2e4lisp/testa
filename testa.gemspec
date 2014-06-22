@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.version       = Testa::VERSION
   spec.authors       = ["wenjun.yan"]
   spec.email         = ["mylastnameisyan@gmail.com"]
-  spec.summary       = %q{TODO: Write a short summary. Required.}
-  spec.description   = %q{TODO: Write a longer description. Optional.}
+  spec.summary       = %q{Simple test framework}
+  spec.description   = %q{Simple test framework}
   spec.homepage      = ""
   spec.license       = "MIT"
 
