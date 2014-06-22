@@ -4,9 +4,9 @@ module Testa
 
   # Create a test
   #
-  #   description - test's description string. Default is nil
-  #   options     - :before, :after hooks
-  #   block       - test code
+  #   description - {String} test's description string. Default is nil
+  #   options     - {Hash} meta data
+  #   block       - {Block} test code
   def test description=nil, options={}, &block
     location = caller(0)[1].split(":").tap(&:pop).join ":"
     Testa.tests << Test.new(location, description, options, &block)
@@ -31,6 +31,10 @@ module Testa
       runnable.each { |t| reporter.after_each(t.call) }
       reporter.after_all(results)
       results.none? { |r| [:error, :failed].include? r.status }
+    end
+
+    def run!
+      exit(run ? 0 : 1)
     end
 
     def tests
