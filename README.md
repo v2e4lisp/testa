@@ -33,7 +33,7 @@ test("some description") {
 ### assertion
 
 - `ok(&block)`
-- `error(class_or_message=nil, message=nil)`
+- `error(class_or_message=nil, message=nil, &block)`
 
 ### run test
 
