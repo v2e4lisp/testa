@@ -44,7 +44,7 @@ module Testa
     end
 
     def results
-      runnable.map(&:result)
+      runnable.map(&:result).compact
     end
   end
 
