@@ -1,6 +1,6 @@
 # Testa
 
-TODO: Write a gem description
+simple test framework
 
 ## Installation
 
@@ -18,12 +18,24 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+### create tests
 
-## Contributing
+```ruby
+require 'testa'
+include Testa
 
-1. Fork it ( https://github.com/[my-github-username]/testa/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+test("some description") {
+  ok { true }
+  /* test code goes here */
+}
+```
+
+### assertion
+
+- `ok(&block)`
+- `error(class_or_message=nil, message=nil)`
+
+### run test
+
+`Testa.run!`
+
