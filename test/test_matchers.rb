@@ -1,5 +1,4 @@
 require 'minitest/autorun'
-require 'Testa'
 
 class TestMatchers <  MiniTest::Unit::TestCase
   include Testa::Matcher
