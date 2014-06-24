@@ -1,6 +1,6 @@
-require "testa/version"
-
 module Testa
+
+  VERSION = "0.0.1"
 
   # Create a test
   #
