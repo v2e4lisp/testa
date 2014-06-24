@@ -22,7 +22,6 @@ Or install it yourself as:
 
 ```ruby
 require 'testa'
-include Testa
 
 test("some description") {
   ok { true }
@@ -37,5 +36,6 @@ test("some description") {
 
 ### run test
 
-`Testa.run!`
+- `Testa.run!`
+- `Testa.autorun` in `some-test.rb` and `ruby some-test.rb`
 
