@@ -1,4 +1,5 @@
-include Testa
+require '../lib/testa'
+Testa.autorun
 
 test("failed") {
   ok { 1 == 2 }
@@ -14,4 +15,3 @@ test("error") {
   undeinfed_vars
 }
 
-Testa.run

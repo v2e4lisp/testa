@@ -8,7 +8,7 @@ module Testa
   #   options     - {Hash} meta data
   #   block       - {Block} test code
   def test description=nil, options={}, &block
-    location = caller(0)[1].split(":").tap(&:pop).join ":"
+    location = caller(0)[1].split(":")[0..1].join(":")
     Testa.tests << Test.new(location, description, options, &block)
   end
 
@@ -25,7 +25,21 @@ module Testa
                    :filters      => []}
     end
 
+    def autorun
+      return if @autorun_installed
+
+      at_exit {
+        next if @done
+        next unless $!.nil? || $!.kind_of?(SystemExit)
+        @autorun_installed = true
+        run!
+      }
+    end
+
     def run
+      return if @done
+
+      @done = true
       Testa::Context.send(:include, *config[:matchers])
       reporter = config[:reporter]
       runnable.each { |t| reporter.after_each(t.call) }
@@ -44,7 +58,7 @@ module Testa
     protected
 
     def runnable
-      @_tests ||= config[:filters].inject(tests) {|ts, f| f.call ts}
+      @_tests ||= config[:filters].inject(tests) {|ts, f| f.call [*ts]}
     end
 
     def results
@@ -126,14 +140,14 @@ module Testa
         case result.status
         when :failed, :error
           @out.puts
-          @out.puts "[#{result.status.upcase}] #{result.test.location}",
+          @out.puts "[#{result.status.to_s.upcase}] #{result.test.location}",
             (result.test.description || "*NO DESCRIPTION*")
           @out.puts "\t#{result.exception.message}"
           @out.puts result.exception.backtrace.reject {|m| m[__FILE__] }
 
         when :todo
           @out.puts
-          @out.puts "[#{result.status.upcase}] #{result.test.location}",
+          @out.puts "[#{result.status.to_s.upcase}] #{result.test.location}",
             result.test.description || "*NO DESCRIPTION*"
         end
       }
@@ -179,5 +193,6 @@ module Testa
       raise Failure
     end
   end
-
 end
+
+include Testa

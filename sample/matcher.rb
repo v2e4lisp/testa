@@ -1,4 +1,5 @@
-include Testa
+require '../lib/testa'
+Testa.autorun
 
 class MyError < StandardError; end
 
@@ -57,5 +58,3 @@ test("user have a default name") {
 test("[NO SETUP] user have a default name ") {
   ok { @user.name == "default-user" }
 }
-
-Testa.run
